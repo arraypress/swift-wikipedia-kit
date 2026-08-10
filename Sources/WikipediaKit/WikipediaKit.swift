@@ -357,7 +357,11 @@ extension WikipediaKit {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "\(language.code).wikipedia.org"
-        components.path = "/api/rest_v1/page/summary/\(title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? title)"
+        // Assigned raw. `URLComponents.path` percent-encodes what it is given,
+        // so pre-encoding produced `Ada%2520Lovelace` for "Ada Lovelace" — a
+        // path Wikimedia answers with 403. Every title containing a space was
+        // affected, which is most of them.
+        components.path = "/api/rest_v1/page/summary/\(title)"
         return components.url!
     }
     
@@ -402,7 +406,11 @@ extension WikipediaKit {
             case 200:
                 return data
             case 403:
-                throw WikipediaError.rateLimited
+                // Not a rate limit. Wikimedia returns 403 for a blocked or
+                // missing User-Agent and for a malformed path; calling it
+                // "rate limited" sends the caller off to wait rather than fix
+                // the request.
+                throw WikipediaError.networkError("403 - Forbidden (check the User-Agent and the request path)")
             case 404:
                 throw WikipediaError.networkError("404 - Not found")
             case 429:
