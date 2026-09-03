@@ -336,6 +336,89 @@ extension WikipediaKit {
     }
     
     /// Builds URL for article search
+    // MARK: - Full text and translations
+
+    /// The article's complete plain text.
+    ///
+    /// A different endpoint from ``getArticle(_:language:)`` on purpose: that
+    /// one returns the REST summary, which is the lead paragraph. This is
+    /// `action=query&prop=extracts&explaintext`, which is the page. For Alan
+    /// Turing that is 448 characters against 63,928, so the two are not
+    /// interchangeable and neither should quietly stand in for the other.
+    ///
+    /// - Throws: ``WikipediaError`` on a bad title or a failed request.
+    /// - Returns: `nil` when no such article exists.
+    public static func getContent(
+        _ title: String,
+        language: WikipediaLanguage = .english
+    ) async throws -> WikipediaContent? {
+        try validateArticleTitle(title)
+
+        let data = try await performRequest(url: buildExtractURL(title: title, language: language))
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let query = root["query"] as? [String: Any],
+              let pages = query["pages"] as? [String: Any] else { return nil }
+
+        /// Keyed by page id, and a MISSING page is keyed "-1" with no
+        /// extract — so the absence has to be read from the shape rather
+        /// than from an error, which the API does not return for this.
+        for (key, value) in pages {
+            guard key != "-1", let page = value as? [String: Any],
+                  let text = page["extract"] as? String, !text.isEmpty,
+                  let pageId = page["pageid"] as? Int,
+                  let pageTitle = page["title"] as? String else { continue }
+
+            var components = URLComponents()
+            components.scheme = "https"
+            components.host = "\(language.code).wikipedia.org"
+            components.path = "/wiki/\(pageTitle)"
+
+            return WikipediaContent(
+                title: pageTitle,
+                text: text,
+                pageId: pageId,
+                language: language,
+                url: components.url ?? URL(string: "https://\(language.code).wikipedia.org")!
+            )
+        }
+        return nil
+    }
+
+    /// Every other language this article exists in.
+    ///
+    /// The titles are carried, not derived: an article's name in another
+    /// language is frequently not a translation of this one — `Alan Turing`
+    /// is `ألان تورنج` in Arabic — so a code alone cannot build a working URL.
+    public static func getTranslations(
+        _ title: String,
+        language: WikipediaLanguage = .english
+    ) async throws -> [WikipediaTranslation] {
+        try validateArticleTitle(title)
+
+        let data = try await performRequest(url: buildLangLinksURL(title: title, language: language))
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let query = root["query"] as? [String: Any],
+              let pages = query["pages"] as? [String: Any] else { return [] }
+
+        for (key, value) in pages where key != "-1" {
+            guard let page = value as? [String: Any],
+                  let links = page["langlinks"] as? [[String: Any]] else { continue }
+            return links.compactMap { link in
+                guard let code = link["lang"] as? String,
+                      let name = link["*"] as? String ?? link["title"] as? String else { return nil }
+                /// `*` carries the TITLE in that language and `autonym` the
+                /// language's own name; older responses put the title in `*`
+                /// alone, so both are read and the autonym falls back to the
+                /// code rather than to the title.
+                let autonym = link["autonym"] as? String ?? code
+                let translated = link["*"] as? String ?? name
+                return WikipediaTranslation(code: code, name: autonym, title: translated)
+            }
+            .sorted { $0.code < $1.code }
+        }
+        return []
+    }
+
     private static func buildSearchURL(query: String, language: WikipediaLanguage, limit: Int) -> URL {
         var components = URLComponents()
         components.scheme = "https"
@@ -352,6 +435,44 @@ extension WikipediaKit {
         return components.url!
     }
     
+    /// Builds the URL for an article's full plain text.
+    private static func buildExtractURL(title: String, language: WikipediaLanguage) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "\(language.code).wikipedia.org"
+        components.path = "/w/api.php"
+        components.queryItems = [
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "prop", value: "extracts"),
+            URLQueryItem(name: "explaintext", value: "1"),
+            URLQueryItem(name: "redirects", value: "1"),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "titles", value: title)
+        ]
+        return components.url!
+    }
+
+    /// Builds the URL for an article's other-language versions.
+    private static func buildLangLinksURL(title: String, language: WikipediaLanguage) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "\(language.code).wikipedia.org"
+        components.path = "/w/api.php"
+        components.queryItems = [
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "prop", value: "langlinks"),
+            /// 500 is the API's own ceiling for an anonymous caller, and a
+            /// well-linked article passes 200 — the default of 10 would
+            /// silently return a tenth of the answer.
+            URLQueryItem(name: "lllimit", value: "500"),
+            URLQueryItem(name: "llprop", value: "autonym|langname"),
+            URLQueryItem(name: "redirects", value: "1"),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "titles", value: title)
+        ]
+        return components.url!
+    }
+
     /// Builds URL for article summary
     private static func buildSummaryURL(title: String, language: WikipediaLanguage) -> URL {
         var components = URLComponents()

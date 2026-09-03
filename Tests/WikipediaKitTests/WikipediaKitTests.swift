@@ -574,3 +574,51 @@ final class WikipediaKitTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.relevanceScore, 0.0, "Relevance score should be non-negative")
     }
 }
+
+// MARK: - Full text and translations
+
+final class ContentAndTranslationTests: XCTestCase {
+
+    func testContentIsTheArticleNotTheSummary() async throws {
+        // The distinction this exists for: the summary endpoint returns the
+        // lead paragraph, about 450 characters for this article. The article
+        // itself is over sixty thousand. Returning the first while calling it
+        // the article hands back under 1% of the page with nothing to say so.
+        guard let content = try await WikipediaKit.getContent("Alan Turing") else {
+            throw XCTSkip("network unavailable")
+        }
+        XCTAssertGreaterThan(content.characterCount, 20_000, "got \(content.characterCount) chars")
+        XCTAssertGreaterThan(content.wordCount, 3_000)
+        XCTAssertEqual(content.title, "Alan Turing")
+        XCTAssertTrue(content.text.contains("Turing"))
+    }
+
+    func testAMissingPageIsNilRatherThanAnEmptyArticle() async throws {
+        // The API keys a missing page as "-1" with no extract and returns no
+        // error, so the absence has to be read from the shape.
+        let content = try await WikipediaKit.getContent("Qzxjkl Nonexistent Page 12345")
+        XCTAssertNil(content)
+    }
+
+    func testTranslationsCarryTheirOwnTitles() async throws {
+        let translations = try await WikipediaKit.getTranslations("Alan Turing")
+        guard !translations.isEmpty else { throw XCTSkip("network unavailable") }
+
+        // Well past the API's default limit of 10, which is the reason the
+        // request asks for 500.
+        XCTAssertGreaterThan(translations.count, 50, "got \(translations.count)")
+
+        // A title in another language is frequently not a transliteration of
+        // this one, so it cannot be derived from the code.
+        let arabic = try XCTUnwrap(translations.first { $0.code == "ar" })
+        XCTAssertNotEqual(arabic.title, "Alan Turing")
+        XCTAssertTrue(arabic.url?.absoluteString.hasPrefix("https://ar.wikipedia.org/wiki/") == true)
+    }
+
+    func testTranslationsAreSortedAndUnique() async throws {
+        let translations = try await WikipediaKit.getTranslations("Alan Turing")
+        guard !translations.isEmpty else { throw XCTSkip("network unavailable") }
+        XCTAssertEqual(translations.map(\.code), translations.map(\.code).sorted())
+        XCTAssertEqual(Set(translations.map(\.code)).count, translations.count)
+    }
+}
