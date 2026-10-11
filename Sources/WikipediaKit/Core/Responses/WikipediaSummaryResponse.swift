@@ -7,13 +7,17 @@
 
 import Foundation
 
-/// The REST `page/summary` body — also the shape of the random article and of the featured feed's `tfa`.
+/// The REST `page/summary` body — also the shape of the random article, of the
+/// daily feed's articles (featured, most read, news, on this day) and of the
+/// on-this-day pages. Those embedded copies sometimes lack an extract or the
+/// content URLs, so both are optional.
 internal struct WikipediaSummaryResponse: Codable {
     let title: String
-    let extract: String
+    let titles: WikipediaTitlesResponse?
+    let extract: String?
     let description: String?
     let thumbnail: WikipediaThumbnailResponse?
-    let content_urls: WikipediaContentURLs
+    let content_urls: WikipediaContentURLs?
     let pageid: Int
     let timestamp: Date?
 }

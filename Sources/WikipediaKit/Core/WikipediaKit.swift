@@ -36,7 +36,7 @@ public struct WikipediaKit {
 
     /// The User-Agent every request carries. Wikimedia's policy asks for a way
     /// to reach the client's author; a request without one can be blocked (403).
-    static let userAgent = "WikipediaKit/1.1 (https://github.com/arraypress/swift-wikipedia-kit)"
+    static let userAgent = "WikipediaKit/1.2 (https://github.com/arraypress/swift-wikipedia-kit)"
 
     // MARK: - Search
 
@@ -60,7 +60,7 @@ public struct WikipediaKit {
         language: WikipediaLanguage = .english,
         limit: Int = 10
     ) async throws -> [WikipediaSearchResult] {
-        try validateSearchQuery(query)
+        try Validation.searchQuery(query)
         let data = try await performRequest(url: WikipediaURLs.search(query: query, language: language, limit: max(1, min(50, limit))))
         return try ResponseDecoding.decode(WikipediaSearchResponse.self, from: data).query.search.map { result in
             WikipediaSearchResult(
@@ -112,7 +112,7 @@ public struct WikipediaKit {
         _ title: String,
         language: WikipediaLanguage = .english
     ) async throws -> WikipediaArticle? {
-        try validateArticleTitle(title)
+        try Validation.articleTitle(title)
         do {
             let data = try await performRequest(url: WikipediaURLs.summary(title: title, language: language))
             return WikipediaArticle(summary: try ResponseDecoding.decode(WikipediaSummaryResponse.self, from: data), language: language)
@@ -192,7 +192,7 @@ public struct WikipediaKit {
         _ title: String,
         language: WikipediaLanguage = .english
     ) async throws -> WikipediaContent? {
-        try validateArticleTitle(title)
+        try Validation.articleTitle(title)
         let data = try await performRequest(url: WikipediaURLs.extract(title: title, language: language))
         guard let pages = try queryPages(data) else { return nil }
 
@@ -225,7 +225,7 @@ public struct WikipediaKit {
         _ title: String,
         language: WikipediaLanguage = .english
     ) async throws -> [WikipediaTranslation] {
-        try validateArticleTitle(title)
+        try Validation.articleTitle(title)
         let data = try await performRequest(url: WikipediaURLs.langLinks(title: title, language: language))
         guard let pages = try queryPages(data) else { return [] }
 
@@ -247,26 +247,12 @@ public struct WikipediaKit {
     }
 }
 
-// MARK: - Validation, request
+// MARK: - Request
 
 extension WikipediaKit {
 
-    /// A non-empty query of at most 300 characters.
-    private static func validateSearchQuery(_ query: String) throws {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw WikipediaError.invalidQuery("Search query cannot be empty") }
-        guard trimmed.count <= 300 else { throw WikipediaError.invalidQuery("Search query too long (max 300 characters)") }
-    }
-
-    /// A non-empty title of at most 255 characters.
-    private static func validateArticleTitle(_ title: String) throws {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw WikipediaError.invalidQuery("Article title cannot be empty") }
-        guard trimmed.count <= 255 else { throw WikipediaError.invalidQuery("Article title too long (max 255 characters)") }
-    }
-
     /// The `query.pages` object of an `action=query` response.
-    private static func queryPages(_ data: Data) throws -> [String: Any]? {
+    static func queryPages(_ data: Data) throws -> [String: Any]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw WikipediaError.parseError("the response is not a JSON object")
         }
@@ -274,7 +260,7 @@ extension WikipediaKit {
     }
 
     /// One GET, its status mapped onto ``WikipediaError``.
-    private static func performRequest(url: URL) async throws -> Data {
+    static func performRequest(url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")

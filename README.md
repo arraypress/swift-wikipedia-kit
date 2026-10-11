@@ -10,6 +10,13 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 - ⭐ **Featured articles** — `featuredArticle(for:)` retrieves Wikipedia's daily featured article for any date
 - 📚 **Full article text** — `getContent(_:)` returns the whole page as plain text (the summary is only the lead: 448 characters of Alan Turing's 63,928)
 - 🌐 **Other languages** — `getTranslations(_:)` lists every language an article exists in, with its title there
+- 📰 **The daily feed** — `dailyFeed()` returns Wikipedia's front page for any day: featured article, most read (with views), in the news, picture of the day (with credit and licence), "Did you know…" and anniversaries
+- 📅 **On this day** — `onThisDay(month:day:type:)` lists events, births, deaths, holidays, or the editors' selection
+- 📍 **Places** — `nearby(latitude:longitude:radius:)` finds articles about places near a point, nearest first; `coordinates(of:)` locates an article's subject
+- ⌨️ **Autocomplete** — `suggestions(_:)` uses the API made for typeahead ("alan tur" → Alan Turing, Alan Turing Institute…)
+- 🔗 **Wikidata** — `wikidataID(for:)` returns an article's item ID (Alan Turing → `Q7251`)
+- 📈 **Page views** — `pageViews(_:from:to:)` gives daily human readership from Wikimedia's pageviews API
+- 🖼️ **Media and categories** — `media(of:)` lists every image, video and sound file on a page; `categories(of:)` its visible categories
 - 🏷️ **Title-only search** — `searchTitles(_:)` returns just article titles, ideal for autocomplete
 - 🎯 **Best-match lookup** — `findArticle(_:)` tries an exact title then falls back to search to return the single most relevant article
 - 🌍 **20 language editions** — `WikipediaLanguage` covers English, Spanish, French, German, Japanese, Chinese, Arabic, and more, with native and English names
@@ -32,7 +39,7 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/arraypress/swift-wikipedia-kit.git", from: "1.0.0")
+    .package(url: "https://github.com/arraypress/swift-wikipedia-kit.git", from: "1.2.0")
 ]
 ```
 
@@ -100,6 +107,50 @@ let article = try await WikipediaKit.getArticle("Albert Einstein", language: .ge
 print(article?.title ?? "Not found")
 ```
 
+### The daily feed and anniversaries
+
+```swift
+import WikipediaKit
+
+let feed = try await WikipediaKit.dailyFeed()
+for trending in feed.mostRead.prefix(5) {
+    print("\(trending.rank). \(trending.article.title) — \(trending.views) views")
+}
+print(feed.picture?.title ?? "", feed.picture?.license ?? "")
+
+let births = try await WikipediaKit.onThisDay(month: 10, day: 11, type: .births)
+```
+
+Sections a language edition does not publish come back empty — of the 20 editions, only English,
+German, Japanese, Chinese and Swedish carry a featured article in the feed, and eight have no
+"on this day" feed. A day before the feed began (2016) returns an empty feed rather than an error.
+
+### Places
+
+```swift
+import WikipediaKit
+
+let around = try await WikipediaKit.nearby(latitude: 48.8584, longitude: 2.2945, radius: 1_000)
+let tower = try await WikipediaKit.coordinates(of: "Eiffel Tower")   // nil for people and ideas
+```
+
+### More about one article
+
+```swift
+import WikipediaKit
+
+let titles = try await WikipediaKit.suggestions("alan tur")              // typeahead
+let item = try await WikipediaKit.wikidataID(for: "Alan Turing")          // "Q7251"
+let views = try await WikipediaKit.pageViews("Alan Turing", from: lastWeek)
+let media = try await WikipediaKit.media(of: "Apollo 11")                 // images, video, audio
+let categories = try await WikipediaKit.categories(of: "Alan Turing")     // "1912 births", …
+```
+
+Missing things are empty or `nil`, not errors: an article without coordinates, a Wikidata item,
+media or page views; a page-views range before July 2015 or in the future. Impossible input is
+refused before any request with `WikipediaError.invalidQuery` — 30 February, coordinates off the
+globe, a radius outside the API's 10–10,000 m, a range that runs backwards, an empty prefix.
+
 ### Error handling
 
 ```swift
@@ -120,7 +171,7 @@ WikipediaKit talks to two of Wikipedia's public endpoints:
 1. **Action API** (`/w/api.php`) — used by `search` for full-text results, returning snippets and word counts. Snippets are stripped of HTML and their entities decoded (`&quot;` → `"`), and each result gets a relevance score from 0 to 2: 2 for each query word in the title, 1 for each found only in the snippet, averaged over the query, with punctuation ignored so "Observer (quantum physics)" matches "quantum physics".
 2. **REST API** (`/api/rest_v1/…`) — used by `getArticle`, `randomArticle`, and `featuredArticle` to retrieve page summaries and the daily featured feed. The featured feed's date is always sent in the Gregorian calendar, whatever calendar the device uses.
 
-`getContent` and `getTranslations` use the Action API's `extracts` and `langlinks`. Queries and titles are validated and length-clamped before any request, and requests carry a timeout and a User-Agent with a contact URL, as Wikimedia's policy asks. A response in an unexpected shape throws `WikipediaError.parseError`. A `404` from the summary endpoint is mapped to `nil` rather than an error, so `getArticle` cleanly signals "not found".
+`getContent` and `getTranslations` use the Action API's `extracts` and `langlinks`; `nearby`, `coordinates`, `wikidataID` and `categories` its `geosearch`, `coordinates`, `pageprops` and `categories` (following continuation, hidden categories excluded), and `suggestions` its `opensearch`. The daily feed, on this day and media come from the REST API, and page views from Wikimedia's pageviews API. Articles inside the feed carry their page key as their title ("List_of_equations"); the readable `normalized` title is used instead. Queries and titles are validated and length-clamped before any request, and requests carry a timeout and a User-Agent with a contact URL, as Wikimedia's policy asks. A response in an unexpected shape throws `WikipediaError.parseError`. A `404` from the summary endpoint is mapped to `nil` rather than an error, so `getArticle` cleanly signals "not found".
 
 ## Models
 
@@ -130,6 +181,16 @@ WikipediaKit talks to two of Wikipedia's public endpoints:
 | `WikipediaSearchResult` | struct | Search hit: `title`, `snippet`, `pageId`, `wordCount`, `relevanceScore`, plus `estimatedReadingTime` and `isHighlyRelevant` |
 | `WikipediaContent` | struct | Full article: `title`, `text`, `pageId`, `language`, `url`, plus `characterCount` and `wordCount` |
 | `WikipediaTranslation` | struct | Another language of an article: `code`, `name` (its autonym), `title`, and `url` |
+| `WikipediaDailyFeed` | struct | A day's front page: `featured`, `mostRead`, `news`, `picture`, `didYouKnow`, `onThisDay` |
+| `WikipediaTrendingArticle` | struct | A most-read article with its `views` and `rank` |
+| `WikipediaNewsStory` | struct | An "In the news" story: `text` and the `articles` it links |
+| `WikipediaPicture` | struct | Picture of the day: `image`, `thumbnail`, `description`, `artist`, `credit`, `license`, `licenseURL`, `filePage` |
+| `WikipediaHistoricalEvent` | struct | An anniversary: `text`, `year` (nil for holidays), `articles` |
+| `WikipediaNearbyArticle` | struct | A place's article: `title`, `pageId`, `coordinates`, `distance` in metres |
+| `WikipediaCoordinates` | struct | `latitude`, `longitude` |
+| `WikipediaDailyViews` | struct | One UTC day's human `views` |
+| `WikipediaMediaItem` | struct | A file on a page: `title`, `type` (image/video/audio), `url`, `isLeadImage`, `caption` |
+| `WikipediaEventType` | enum | `selected`, `events`, `births`, `deaths`, `holidays` |
 | `WikipediaImage` | struct | Image: `source`, `width`, `height`, plus `aspectRatio`, `isLandscape`, `isPortrait`, `isSquare` |
 | `ArticleLengthCategory` | enum | `stub`, `short`, `medium`, `long`, `veryLong` with descriptions and reading-time ranges |
 | `WikipediaLanguage` | enum | 20 supported editions with `code`, native `name`, and `englishName` |
@@ -148,7 +209,7 @@ WikipediaKit talks to two of Wikipedia's public endpoints:
 swift test
 ```
 
-The live tests exercise search, summary, random, featured, language handling, and error cases against Wikipedia's APIs; `WikipediaTextTests` checks the text, URL, reading and decoding helpers offline.
+The live tests exercise every endpoint against Wikipedia's APIs, skipping when Wikimedia refuses (403/429); `WikipediaTextTests` and `WikipediaEndpointTests` check the text, URL, validation, format and decoding helpers offline, including a daily feed with sections missing. Every call was also run live against all 20 language editions.
 
 Sources are laid out as `Core/` (the client and the API's JSON shapes), `Models/`, `Enums/`, `Errors/`, `Extensions/` (thin computed properties) and `Support/` (pure functions: URLs, text cleaning, relevance, reading figures, decoding).
 

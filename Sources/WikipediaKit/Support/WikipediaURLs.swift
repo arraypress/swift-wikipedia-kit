@@ -49,6 +49,71 @@ enum WikipediaURLs {
         rest(language, "/api/rest_v1/feed/featured/\(WikipediaText.featuredPath(for: date))")
     }
 
+    /// One kind of anniversary for a day of the year.
+    static func onThisDay(type: WikipediaEventType, month: Int, day: Int, language: WikipediaLanguage) -> URL {
+        rest(language, String(format: "/api/rest_v1/feed/onthisday/%@/%02d/%02d", type.rawValue, month, day))
+    }
+
+    /// The whole daily feed — the featured article and every other section.
+    static func dailyFeed(date: Date, language: WikipediaLanguage) -> URL {
+        featured(date: date, language: language)
+    }
+
+    /// Articles about places within `radius` metres of a point.
+    static func nearby(latitude: Double, longitude: Double, radius: Int, limit: Int, language: WikipediaLanguage) -> URL {
+        api(language, [("list", "geosearch"), ("gscoord", "\(latitude)|\(longitude)"), ("gsradius", String(radius)),
+                       ("gslimit", String(limit))])
+    }
+
+    /// An article's primary coordinates.
+    static func coordinates(title: String, language: WikipediaLanguage) -> URL {
+        api(language, [("prop", "coordinates"), ("coprimary", "primary"), ("redirects", "1"), ("titles", title)])
+    }
+
+    /// Title suggestions for a prefix (`opensearch`, main namespace only).
+    static func suggestions(prefix: String, limit: Int, language: WikipediaLanguage) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "\(language.code).wikipedia.org"
+        components.path = "/w/api.php"
+        components.queryItems = [URLQueryItem(name: "action", value: "opensearch"), URLQueryItem(name: "search", value: prefix),
+                                 URLQueryItem(name: "limit", value: String(limit)), URLQueryItem(name: "namespace", value: "0"),
+                                 URLQueryItem(name: "redirects", value: "resolve"), URLQueryItem(name: "format", value: "json")]
+        return components.url!
+    }
+
+    /// An article's Wikidata item (`pageprops`).
+    static func wikidataItem(title: String, language: WikipediaLanguage) -> URL {
+        api(language, [("prop", "pageprops"), ("ppprop", "wikibase_item"), ("redirects", "1"), ("titles", title)])
+    }
+
+    /// An article's visible categories (hidden maintenance ones excluded),
+    /// continuing from `cursor` when the list runs past one page.
+    static func categories(title: String, cursor: String?, language: WikipediaLanguage) -> URL {
+        api(language, [("prop", "categories"), ("clshow", "!hidden"), ("cllimit", "max"), ("redirects", "1"), ("titles", title)]
+                      + (cursor.map { [("clcontinue", $0)] } ?? []))
+    }
+
+    /// The images, video and sound an article uses.
+    static func media(title: String, language: WikipediaLanguage) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "\(language.code).wikipedia.org"
+        components.percentEncodedPath = "/api/rest_v1/page/media-list/" + WikipediaFormat.pageViewsTitle(title)
+        return components.url!
+    }
+
+    /// Daily human views of an article on all platforms, from Wikimedia's pageviews API.
+    static func pageViews(title: String, from start: Date, to end: Date, language: WikipediaLanguage) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "wikimedia.org"
+        components.percentEncodedPath = "/api/rest_v1/metrics/pageviews/per-article/\(language.code).wikipedia/all-access/user/"
+            + WikipediaFormat.pageViewsTitle(title)
+            + "/daily/\(WikipediaFormat.pageViewsDay(start))/\(WikipediaFormat.pageViewsDay(end))"
+        return components.url!
+    }
+
     /// Where to read an article: `https://<code>.wikipedia.org/wiki/<Title_With_Underscores>`,
     /// the form Wikipedia's own links use.
     static func article(title: String, languageCode: String) -> URL? {
