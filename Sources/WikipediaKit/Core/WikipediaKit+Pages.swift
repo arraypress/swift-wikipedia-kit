@@ -15,6 +15,35 @@ import FoundationNetworking
 
 public extension WikipediaKit {
 
+    /// Every Wikipedia that exists — 364 in October 2026, 16 of them closed —
+    /// with its names, from Wikimedia's site matrix.
+    ///
+    /// ```swift
+    /// let welsh = try await WikipediaKit.languages().first { $0.englishName == "Welsh" }
+    /// ```
+    ///
+    /// - Returns: The editions, sorted by code
+    /// - Throws: ``WikipediaError`` if the request fails
+    static func languages() async throws -> [WikipediaEdition] {
+        let data = try await performRequest(url: WikipediaURLs.siteMatrix())
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let matrix = root["sitematrix"] as? [String: Any] else {
+            throw WikipediaError.parseError("the site matrix is not the expected object")
+        }
+        var editions: [WikipediaEdition] = []
+        for (key, value) in matrix where key != "count" && key != "specials" {
+            guard let entry = value as? [String: Any], let sites = entry["site"] as? [[String: Any]],
+                  let site = sites.first(where: { $0["code"] as? String == "wiki" }),
+                  let host = (site["url"] as? String).flatMap(URL.init(string:))?.host,
+                  let subdomain = host.split(separator: ".").first,
+                  let language = WikipediaLanguage(code: String(subdomain)) else { continue }
+            let english = entry["localname"] as? String ?? language.englishName
+            editions.append(WikipediaEdition(language: language, name: entry["name"] as? String ?? english,
+                                             englishName: english, isClosed: site["closed"] != nil))
+        }
+        return editions.sorted { $0.language.code < $1.language.code }
+    }
+
     /// Article titles that start with what has been typed — the API made for
     /// autocomplete, faster than ``searchTitles(_:language:limit:)``, which runs
     /// a full-text search.

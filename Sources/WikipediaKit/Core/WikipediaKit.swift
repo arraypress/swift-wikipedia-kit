@@ -36,7 +36,7 @@ public struct WikipediaKit {
 
     /// The User-Agent every request carries. Wikimedia's policy asks for a way
     /// to reach the client's author; a request without one can be blocked (403).
-    static let userAgent = "WikipediaKit/1.2 (https://github.com/arraypress/swift-wikipedia-kit)"
+    static let userAgent = "WikipediaKit/2.0 (https://github.com/arraypress/swift-wikipedia-kit)"
 
     // MARK: - Search
 
@@ -291,6 +291,9 @@ extension WikipediaKit {
             }
         } catch let error as WikipediaError {
             throw error
+        } catch let error as URLError where error.code == .cannotFindHost || error.code == .dnsLookupFailed {
+            // No such Wikipedia: `xx.wikipedia.org` does not resolve.
+            throw WikipediaError.invalidLanguage(url.host?.components(separatedBy: ".").first ?? url.absoluteString)
         } catch {
             throw WikipediaError.networkError(error.localizedDescription)
         }

@@ -1,6 +1,6 @@
 # Swift Wikipedia Kit
 
-A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKit wraps Wikipedia's public search and REST summary APIs behind a clean async/await interface, letting you search articles, fetch summaries, pull random or featured articles, and work with rich models — all with no API key required and support for 20 language editions.
+A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKit wraps Wikipedia's public Action, REST and pageviews APIs behind a clean async/await interface — search, summaries and full text, the daily front page, places, page views, media and more, as rich models — all with no API key required, in any of Wikipedia's 364 language editions.
 
 ## Features
 
@@ -19,7 +19,7 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 - 🖼️ **Media and categories** — `media(of:)` lists every image, video and sound file on a page; `categories(of:)` its visible categories
 - 🏷️ **Title-only search** — `searchTitles(_:)` returns just article titles, ideal for autocomplete
 - 🎯 **Best-match lookup** — `findArticle(_:)` tries an exact title then falls back to search to return the single most relevant article
-- 🌍 **20 language editions** — `WikipediaLanguage` covers English, Spanish, French, German, Japanese, Chinese, Arabic, and more, with native and English names
+- 🌍 **Every language edition** — 20 built in as constants (`.german`, `.japanese`…) and any of the 364 by code (`WikipediaLanguage(code: "cy")` for Welsh); `languages()` lists them all, with native and English names
 - ⏱️ **Reading insights** — articles expose `estimatedReadingTime` and a `lengthCategory` (stub → very long) computed from the extract
 - 🖼️ **Image metadata** — `WikipediaImage` provides dimensions plus `aspectRatio`, `isLandscape`, `isPortrait`, and `isSquare`
 - 🛡️ **Typed errors** — `WikipediaError` distinguishes network, rate-limit, server, invalid-query, and parse failures, each with a `userFriendlyDescription`
@@ -39,7 +39,7 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/arraypress/swift-wikipedia-kit.git", from: "1.2.0")
+    .package(url: "https://github.com/arraypress/swift-wikipedia-kit.git", from: "2.0.0")
 ]
 ```
 
@@ -100,12 +100,41 @@ if let best = try await WikipediaKit.findArticle("Einstein relativity") {
 
 ### Other languages
 
+Every call takes a `language:`. The 20 most-used editions are constants; any other is
+reachable by its code.
+
 ```swift
 import WikipediaKit
 
-let article = try await WikipediaKit.getArticle("Albert Einstein", language: .german)
-print(article?.title ?? "Not found")
+let german = try await WikipediaKit.getArticle("Albert Einstein", language: .german)
+
+let welsh = WikipediaLanguage(code: "cy")!                       // Cymraeg
+let cardiff = try await WikipediaKit.getArticle("Caerdydd", language: welsh)
+
+let cantonese = WikipediaLanguage(code: "yue")!                  // → zh-yue.wikipedia.org
+let simple = WikipediaLanguage(code: "simple")!                  // Simple English
+
+let editions = try await WikipediaKit.languages()                // all 364, 16 of them closed
 ```
+
+- **Codes** are the edition's subdomain (`en`, `be-tarask`, `zh-min-nan`, `simple`) or, for
+  the seven languages whose subdomain differs, the ISO code (`yue` → `zh-yue`, `gsw` → `als`,
+  `nan` → `zh-min-nan`, `lzh` → `zh-classical`, `rup` → `roa-rup`, `sgs` → `bat-smg`,
+  `vro` → `fiu-vro`). Case and spaces are ignored.
+- **Text that cannot be a code** (`"english"`, `"en_GB"`, `""`) gives `nil`. A well-formed code
+  with no Wikipedia behind it (`"qq"`) throws `WikipediaError.invalidLanguage("qq")` on the
+  first request.
+- **Names** for the 20 constants are built in; for other editions they come from the system,
+  and `languages()` returns Wikimedia's own.
+- **Closed editions** (`isClosed` in `languages()`) still answer but are read-only, and some hold
+  little more than a main page.
+
+#### Upgrading from 1.x
+
+`WikipediaLanguage` became a struct in 2.0 so that every edition is reachable. `.english`,
+`rawValue`, `init(rawValue:)`, `allCases`, `code`, `name` and `englishName` all work as before,
+and so do `case .german:` patterns. The one change: a `switch` over it needs a `default:`,
+since it is no longer a closed list of 20.
 
 ### The daily feed and anniversaries
 
@@ -121,9 +150,9 @@ print(feed.picture?.title ?? "", feed.picture?.license ?? "")
 let births = try await WikipediaKit.onThisDay(month: 10, day: 11, type: .births)
 ```
 
-Sections a language edition does not publish come back empty — of the 20 editions, only English,
-German, Japanese, Chinese and Swedish carry a featured article in the feed, and eight have no
-"on this day" feed. A day before the feed began (2016) returns an empty feed rather than an error.
+Sections a language edition does not publish come back empty — of the 20 built-in editions, only
+English, German, Japanese, Chinese and Swedish carry a featured article in the feed, and eight
+have no "on this day" feed. A day before the feed began (2016) returns an empty feed rather than an error.
 
 ### Places
 
@@ -193,7 +222,8 @@ WikipediaKit talks to two of Wikipedia's public endpoints:
 | `WikipediaEventType` | enum | `selected`, `events`, `births`, `deaths`, `holidays` |
 | `WikipediaImage` | struct | Image: `source`, `width`, `height`, plus `aspectRatio`, `isLandscape`, `isPortrait`, `isSquare` |
 | `ArticleLengthCategory` | enum | `stub`, `short`, `medium`, `long`, `veryLong` with descriptions and reading-time ranges |
-| `WikipediaLanguage` | enum | 20 supported editions with `code`, native `name`, and `englishName` |
+| `WikipediaLanguage` | struct | Any edition: 20 constants plus `init(code:)`; `code`, native `name`, `englishName` |
+| `WikipediaEdition` | struct | An edition from `languages()`: `language`, `name`, `englishName`, `isClosed` |
 | `WikipediaError` | enum | Typed errors with `errorDescription` and `userFriendlyDescription` |
 
 ## Use Cases
@@ -209,7 +239,7 @@ WikipediaKit talks to two of Wikipedia's public endpoints:
 swift test
 ```
 
-The live tests exercise every endpoint against Wikipedia's APIs, skipping when Wikimedia refuses (403/429); `WikipediaTextTests` and `WikipediaEndpointTests` check the text, URL, validation, format and decoding helpers offline, including a daily feed with sections missing. Every call was also run live against all 20 language editions.
+The live tests exercise every endpoint against Wikipedia's APIs, skipping when Wikimedia refuses (403/429); `WikipediaTextTests` and `WikipediaEndpointTests` check the text, URL, validation, format and decoding helpers offline, including a daily feed with sections missing. Every call was also run live against all 20 built-in editions, and `WikipediaLanguageTests` covers code parsing offline and an edition beyond the 20, a non-existent one and the site matrix live.
 
 Sources are laid out as `Core/` (the client and the API's JSON shapes), `Models/`, `Enums/`, `Errors/`, `Extensions/` (thin computed properties) and `Support/` (pure functions: URLs, text cleaning, relevance, reading figures, decoding).
 

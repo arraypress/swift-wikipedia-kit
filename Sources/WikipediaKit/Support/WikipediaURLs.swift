@@ -114,6 +114,11 @@ enum WikipediaURLs {
         return components.url!
     }
 
+    /// Wikimedia's site matrix: every language and its wikis.
+    static func siteMatrix() -> URL {
+        URL(string: "https://meta.wikimedia.org/w/api.php?action=sitematrix&smtype=language&smlangprop=code%7Cname%7Clocalname%7Csite&smsiteprop=code%7Curl&format=json")!
+    }
+
     /// Where to read an article: `https://<code>.wikipedia.org/wiki/<Title_With_Underscores>`,
     /// the form Wikipedia's own links use.
     static func article(title: String, languageCode: String) -> URL? {
