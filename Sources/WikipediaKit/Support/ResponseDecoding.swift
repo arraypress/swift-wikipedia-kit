@@ -13,7 +13,7 @@ enum ResponseDecoding {
     /// Decodes a response, reporting a shape the API did not promise as
     /// ``WikipediaError/parseError(_:)`` — the documented error type — rather
     /// than a raw `DecodingError`.
-    static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws(WikipediaError) -> T {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         do {

@@ -23,14 +23,14 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 - ⏱️ **Reading insights** — articles expose `estimatedReadingTime` and a `lengthCategory` (stub → very long) computed from the extract
 - 🖼️ **Image metadata** — `WikipediaImage` provides dimensions plus `aspectRatio`, `isLandscape`, `isPortrait`, and `isSquare`
 - 🛡️ **Typed errors** — `WikipediaError` distinguishes network, rate-limit, server, invalid-query, and parse failures, each with a `userFriendlyDescription`
-- ⚡ **Modern concurrency** — every API is `async`/`throws`, and all models are `Sendable`
+- ⚡ **Modern concurrency** — every API is `async` with typed throws (`throws(WikipediaError)`), runs on the caller's executor (Swift 6.2's nonisolated-nonsending default), and all models are `Sendable`
 
 ## Requirements
 
 - iOS 15.0+ / macOS 12.0+ / tvOS 15.0+ / watchOS 8.0+ — Apple platforms only. The
   package also compiles on Linux and Windows (it imports `FoundationNetworking` where
   that exists), but those platforms are not tested or supported.
-- Swift 6.1+
+- Swift 6.2+ (Xcode 26)
 - Xcode 26.0+
 
 ## Installation
@@ -188,7 +188,8 @@ import WikipediaKit
 do {
     let results = try await WikipediaKit.search("quantum physics")
     print("Found \(results.count) articles")
-} catch let error as WikipediaError {
+} catch {
+    // Typed throws: `error` is already a WikipediaError — no cast needed.
     print(error.userFriendlyDescription)
 }
 ```

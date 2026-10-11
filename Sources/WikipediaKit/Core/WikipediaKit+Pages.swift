@@ -24,7 +24,7 @@ public extension WikipediaKit {
     ///
     /// - Returns: The editions, sorted by code
     /// - Throws: ``WikipediaError`` if the request fails
-    static func languages() async throws -> [WikipediaEdition] {
+    static func languages() async throws(WikipediaError) -> [WikipediaEdition] {
         let data = try await performRequest(url: WikipediaURLs.siteMatrix())
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let matrix = root["sitematrix"] as? [String: Any] else {
@@ -62,7 +62,7 @@ public extension WikipediaKit {
         _ prefix: String,
         limit: Int = 10,
         language: WikipediaLanguage = .english
-    ) async throws -> [String] {
+    ) async throws(WikipediaError) -> [String] {
         try Validation.searchQuery(prefix)
         let data = try await performRequest(url: WikipediaURLs.suggestions(prefix: prefix, limit: max(1, min(100, limit)), language: language))
         // ["the prefix", [titles], [descriptions], [urls]]
@@ -80,7 +80,7 @@ public extension WikipediaKit {
     static func wikidataID(
         for title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> String? {
+    ) async throws(WikipediaError) -> String? {
         try Validation.articleTitle(title)
         guard let pages = try queryPages(try await performRequest(url: WikipediaURLs.wikidataItem(title: title, language: language))) else { return nil }
         for (key, value) in pages where key != "-1" {
@@ -111,7 +111,7 @@ public extension WikipediaKit {
         from start: Date,
         to end: Date = Date(),
         language: WikipediaLanguage = .english
-    ) async throws -> [WikipediaDailyViews] {
+    ) async throws(WikipediaError) -> [WikipediaDailyViews] {
         try Validation.articleTitle(title)
         try Validation.dateRange(from: start, to: end)
         do {
@@ -131,7 +131,7 @@ public extension WikipediaKit {
     static func media(
         of title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> [WikipediaMediaItem] {
+    ) async throws(WikipediaError) -> [WikipediaMediaItem] {
         try Validation.articleTitle(title)
         do {
             let data = try await performRequest(url: WikipediaURLs.media(title: title, language: language))
@@ -151,7 +151,7 @@ public extension WikipediaKit {
     static func categories(
         of title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> [String] {
+    ) async throws(WikipediaError) -> [String] {
         try Validation.articleTitle(title)
         var names: [String] = [], cursor: String?
         // The API pages its answer; follow it, but not forever.

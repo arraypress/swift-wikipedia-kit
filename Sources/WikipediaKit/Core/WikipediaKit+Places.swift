@@ -34,7 +34,7 @@ public extension WikipediaKit {
         radius: Int = 1_000,
         limit: Int = 10,
         language: WikipediaLanguage = .english
-    ) async throws -> [WikipediaNearbyArticle] {
+    ) async throws(WikipediaError) -> [WikipediaNearbyArticle] {
         try Validation.coordinates(latitude: latitude, longitude: longitude)
         try Validation.radius(radius)
         let url = WikipediaURLs.nearby(latitude: latitude, longitude: longitude, radius: radius,
@@ -54,7 +54,7 @@ public extension WikipediaKit {
     static func coordinates(
         of title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaCoordinates? {
+    ) async throws(WikipediaError) -> WikipediaCoordinates? {
         try Validation.articleTitle(title)
         guard let pages = try queryPages(try await performRequest(url: WikipediaURLs.coordinates(title: title, language: language))) else { return nil }
         for (key, value) in pages where key != "-1" {

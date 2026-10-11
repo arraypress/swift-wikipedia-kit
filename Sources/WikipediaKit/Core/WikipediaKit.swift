@@ -36,7 +36,7 @@ public struct WikipediaKit {
 
     /// The User-Agent every request carries. Wikimedia's policy asks for a way
     /// to reach the client's author; a request without one can be blocked (403).
-    static let userAgent = "WikipediaKit/2.0 (https://github.com/arraypress/swift-wikipedia-kit)"
+    static let userAgent = "WikipediaKit/2.1 (https://github.com/arraypress/swift-wikipedia-kit)"
 
     // MARK: - Search
 
@@ -59,7 +59,7 @@ public struct WikipediaKit {
         _ query: String,
         language: WikipediaLanguage = .english,
         limit: Int = 10
-    ) async throws -> [WikipediaSearchResult] {
+    ) async throws(WikipediaError) -> [WikipediaSearchResult] {
         try Validation.searchQuery(query)
         let data = try await performRequest(url: WikipediaURLs.search(query: query, language: language, limit: max(1, min(50, limit))))
         return try ResponseDecoding.decode(WikipediaSearchResponse.self, from: data).query.search.map { result in
@@ -89,7 +89,7 @@ public struct WikipediaKit {
         _ query: String,
         language: WikipediaLanguage = .english,
         limit: Int = 10
-    ) async throws -> [String] {
+    ) async throws(WikipediaError) -> [String] {
         try await search(query, language: language, limit: limit).map(\.title)
     }
 
@@ -111,7 +111,7 @@ public struct WikipediaKit {
     public static func getArticle(
         _ title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaArticle? {
+    ) async throws(WikipediaError) -> WikipediaArticle? {
         try Validation.articleTitle(title)
         do {
             let data = try await performRequest(url: WikipediaURLs.summary(title: title, language: language))
@@ -128,7 +128,7 @@ public struct WikipediaKit {
     /// - Throws: `WikipediaError` if the request fails
     public static func randomArticle(
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaArticle {
+    ) async throws(WikipediaError) -> WikipediaArticle {
         let data = try await performRequest(url: WikipediaURLs.random(language: language))
         return WikipediaArticle(summary: try ResponseDecoding.decode(WikipediaSummaryResponse.self, from: data), language: language)
     }
@@ -152,7 +152,7 @@ public struct WikipediaKit {
     public static func featuredArticle(
         for date: Date = Date(),
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaArticle {
+    ) async throws(WikipediaError) -> WikipediaArticle {
         let data = try await performRequest(url: WikipediaURLs.featured(date: date, language: language))
         return WikipediaArticle(summary: try ResponseDecoding.decode(WikipediaFeaturedResponse.self, from: data).tfa, language: language)
     }
@@ -168,7 +168,7 @@ public struct WikipediaKit {
     public static func findArticle(
         _ query: String,
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaArticle? {
+    ) async throws(WikipediaError) -> WikipediaArticle? {
         if let exactMatch = try await getArticle(query, language: language) {
             return exactMatch
         }
@@ -191,7 +191,7 @@ public struct WikipediaKit {
     public static func getContent(
         _ title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaContent? {
+    ) async throws(WikipediaError) -> WikipediaContent? {
         try Validation.articleTitle(title)
         let data = try await performRequest(url: WikipediaURLs.extract(title: title, language: language))
         guard let pages = try queryPages(data) else { return nil }
@@ -224,7 +224,7 @@ public struct WikipediaKit {
     public static func getTranslations(
         _ title: String,
         language: WikipediaLanguage = .english
-    ) async throws -> [WikipediaTranslation] {
+    ) async throws(WikipediaError) -> [WikipediaTranslation] {
         try Validation.articleTitle(title)
         let data = try await performRequest(url: WikipediaURLs.langLinks(title: title, language: language))
         guard let pages = try queryPages(data) else { return [] }
@@ -252,7 +252,7 @@ public struct WikipediaKit {
 extension WikipediaKit {
 
     /// The `query.pages` object of an `action=query` response.
-    static func queryPages(_ data: Data) throws -> [String: Any]? {
+    static func queryPages(_ data: Data) throws(WikipediaError) -> [String: Any]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw WikipediaError.parseError("the response is not a JSON object")
         }
@@ -260,7 +260,7 @@ extension WikipediaKit {
     }
 
     /// One GET, its status mapped onto ``WikipediaError``.
-    static func performRequest(url: URL) async throws -> Data {
+    static func performRequest(url: URL) async throws(WikipediaError) -> Data {
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")

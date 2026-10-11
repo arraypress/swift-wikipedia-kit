@@ -35,7 +35,7 @@ public extension WikipediaKit {
     static func dailyFeed(
         for date: Date = Date(),
         language: WikipediaLanguage = .english
-    ) async throws -> WikipediaDailyFeed {
+    ) async throws(WikipediaError) -> WikipediaDailyFeed {
         do {
             let data = try await performRequest(url: WikipediaURLs.dailyFeed(date: date, language: language))
             return WikipediaDailyFeed(response: try ResponseDecoding.decode(WikipediaDailyFeedResponse.self, from: data),
@@ -65,7 +65,7 @@ public extension WikipediaKit {
         day: Int,
         type: WikipediaEventType = .selected,
         language: WikipediaLanguage = .english
-    ) async throws -> [WikipediaHistoricalEvent] {
+    ) async throws(WikipediaError) -> [WikipediaHistoricalEvent] {
         try Validation.monthDay(month: month, day: day)
         do {
             let data = try await performRequest(url: WikipediaURLs.onThisDay(type: type, month: month, day: day, language: language))
