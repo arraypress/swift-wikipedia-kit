@@ -443,7 +443,10 @@ final class WikipediaKitTests: XCTestCase {
                 
                 // Check word count from extract instead of wordCount property
                 let words = article.extract.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-                XCTAssertGreaterThan(words, 100, "List articles should have substantial content")
+                // The summary is Wikipedia's current lead, which editors change:
+                // it was over 100 words when this was written and 21 in October
+                // 2026. Only "there is a summary" is stable.
+                XCTAssertGreaterThan(words, 5, "Should have a summary")
             } else {
                 print("Population list article not found - this may be due to title variations")
             }

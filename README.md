@@ -8,6 +8,8 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 - 📄 **Article summaries** — `getArticle(_:)` fetches a `WikipediaArticle` with extract, description, thumbnail, page URL, and last-modified date
 - 🎲 **Random articles** — `randomArticle()` pulls a fresh article from any language edition for discovery or learning
 - ⭐ **Featured articles** — `featuredArticle(for:)` retrieves Wikipedia's daily featured article for any date
+- 📚 **Full article text** — `getContent(_:)` returns the whole page as plain text (the summary is only the lead: 448 characters of Alan Turing's 63,928)
+- 🌐 **Other languages** — `getTranslations(_:)` lists every language an article exists in, with its title there
 - 🏷️ **Title-only search** — `searchTitles(_:)` returns just article titles, ideal for autocomplete
 - 🎯 **Best-match lookup** — `findArticle(_:)` tries an exact title then falls back to search to return the single most relevant article
 - 🌍 **20 language editions** — `WikipediaLanguage` covers English, Spanish, French, German, Japanese, Chinese, Arabic, and more, with native and English names
@@ -18,7 +20,9 @@ A lightweight, dependency-free Swift library for querying Wikipedia. WikipediaKi
 
 ## Requirements
 
-- iOS 15.0+ / macOS 12.0+ / tvOS 15.0+ / watchOS 8.0+
+- iOS 15.0+ / macOS 12.0+ / tvOS 15.0+ / watchOS 8.0+ — Apple platforms only. The
+  package also compiles on Linux and Windows (it imports `FoundationNetworking` where
+  that exists), but those platforms are not tested or supported.
 - Swift 6.1+
 - Xcode 26.0+
 
@@ -113,10 +117,10 @@ do {
 
 WikipediaKit talks to two of Wikipedia's public endpoints:
 
-1. **Action API** (`/w/api.php`) — used by `search` for full-text results, returning snippets and word counts. Snippets are stripped of HTML and each result is assigned a relevance score weighting title matches above snippet matches.
-2. **REST API** (`/api/rest_v1/…`) — used by `getArticle`, `randomArticle`, and `featuredArticle` to retrieve page summaries and the daily featured feed.
+1. **Action API** (`/w/api.php`) — used by `search` for full-text results, returning snippets and word counts. Snippets are stripped of HTML and their entities decoded (`&quot;` → `"`), and each result gets a relevance score from 0 to 2: 2 for each query word in the title, 1 for each found only in the snippet, averaged over the query, with punctuation ignored so "Observer (quantum physics)" matches "quantum physics".
+2. **REST API** (`/api/rest_v1/…`) — used by `getArticle`, `randomArticle`, and `featuredArticle` to retrieve page summaries and the daily featured feed. The featured feed's date is always sent in the Gregorian calendar, whatever calendar the device uses.
 
-Queries and titles are validated and length-clamped before any request, and requests carry a timeout and a descriptive User-Agent. A `404` from the summary endpoint is mapped to `nil` rather than an error, so `getArticle` cleanly signals "not found".
+`getContent` and `getTranslations` use the Action API's `extracts` and `langlinks`. Queries and titles are validated and length-clamped before any request, and requests carry a timeout and a User-Agent with a contact URL, as Wikimedia's policy asks. A response in an unexpected shape throws `WikipediaError.parseError`. A `404` from the summary endpoint is mapped to `nil` rather than an error, so `getArticle` cleanly signals "not found".
 
 ## Models
 
@@ -124,6 +128,8 @@ Queries and titles are validated and length-clamped before any request, and requ
 |------|------|-------------|
 | `WikipediaArticle` | struct | Article summary: `title`, `extract`, `description`, `thumbnail`, `url`, `pageId`, `language`, `lastModified`, plus computed `estimatedReadingTime`, `lengthCategory`, `hasThumbnail` |
 | `WikipediaSearchResult` | struct | Search hit: `title`, `snippet`, `pageId`, `wordCount`, `relevanceScore`, plus `estimatedReadingTime` and `isHighlyRelevant` |
+| `WikipediaContent` | struct | Full article: `title`, `text`, `pageId`, `language`, `url`, plus `characterCount` and `wordCount` |
+| `WikipediaTranslation` | struct | Another language of an article: `code`, `name` (its autonym), `title`, and `url` |
 | `WikipediaImage` | struct | Image: `source`, `width`, `height`, plus `aspectRatio`, `isLandscape`, `isPortrait`, `isSquare` |
 | `ArticleLengthCategory` | enum | `stub`, `short`, `medium`, `long`, `veryLong` with descriptions and reading-time ranges |
 | `WikipediaLanguage` | enum | 20 supported editions with `code`, native `name`, and `englishName` |
@@ -142,7 +148,9 @@ Queries and titles are validated and length-clamped before any request, and requ
 swift test
 ```
 
-The test suite exercises search, summary, random, featured, language handling, and error cases against the live Wikipedia APIs.
+The live tests exercise search, summary, random, featured, language handling, and error cases against Wikipedia's APIs; `WikipediaTextTests` checks the text, URL, reading and decoding helpers offline.
+
+Sources are laid out as `Core/` (the client and the API's JSON shapes), `Models/`, `Enums/`, `Errors/`, `Extensions/` (thin computed properties) and `Support/` (pure functions: URLs, text cleaning, relevance, reading figures, decoding).
 
 ## License
 
